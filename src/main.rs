@@ -365,7 +365,13 @@ fn work(args: &Args) -> Result<()> {
     let c = config(args)?;
     options(
         args,
-        &[("@tmux-session-version", env!("CARGO_PKG_VERSION").into())],
+        &[
+            ("@tmux-session-version", env!("CARGO_PKG_VERSION").into()),
+            (
+                "@tmux-session-directory",
+                c.directory.to_string_lossy().into_owned(),
+            ),
+        ],
     )?;
     match args.mode {
         Mode::Configure => {

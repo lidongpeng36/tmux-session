@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory(prefix='tmux-session-dirs-') as temp:
             if kind=='expanded':server.set('@resurrect-dir','$HOME/snapshots/$HOSTNAME')
             expected={'xdg':xdg/'tmux/resurrect','legacy':home/'.tmux/resurrect','expanded':home/'snapshots'/socket.gethostname()}[kind]
             server.load();wait(lambda:server.opt('@tmux-session-state')=='disabled')
-            assert (expected/'.tmux-session-owner').is_file(),expected
+            assert (expected/'.tmux-session-owner').is_file(),{'expected':str(expected),'resolved':server.opt('@tmux-session-directory'),'raw':server.opt('@resurrect-dir'),'owners':[str(p) for p in case.rglob('.tmux-session-owner')]}
             if kind=='xdg':assert not (home/'.tmux/resurrect').exists()
             results[kind]=True
         finally:server.close()
