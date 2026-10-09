@@ -15,7 +15,12 @@ with tempfile.TemporaryDirectory(prefix='tmux-session-dirs-') as temp:
             server.cmd('set-environment','-g','HOME',str(home))
             server.cmd('set-environment','-g','XDG_DATA_HOME',str(xdg))
             server.set('@tmux-session-interval','0')
-            if kind=='expanded':server.set('@resurrect-dir','$HOME/snapshots/$HOSTNAME')
+            if kind=='expanded':
+                # Use real tmux.conf syntax. Older tmux escapes '$' when the
+                # option is supplied through its command-line argv parser.
+                config=case/'directory.conf'
+                config.write_text("set -g @resurrect-dir '$HOME/snapshots/$HOSTNAME'\n")
+                server.cmd('source-file',str(config))
             expected={'xdg':xdg/'tmux/resurrect','legacy':home/'.tmux/resurrect','expanded':home/'snapshots'/socket.gethostname()}[kind]
             server.load();wait(lambda:server.opt('@tmux-session-state')=='disabled')
             assert (expected/'.tmux-session-owner').is_file(),{'expected':str(expected),'resolved':server.opt('@tmux-session-directory'),'raw':server.opt('@resurrect-dir'),'owners':[str(p) for p in case.rglob('.tmux-session-owner')]}
