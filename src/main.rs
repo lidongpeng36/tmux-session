@@ -142,6 +142,7 @@ fn config(args: &Args) -> Result<Config> {
         "@continuum-save-last-timestamp",
         "@continuum-boot",
         "@tmux-session-next",
+        "version",
     ];
     let format = fields
         .iter()
@@ -156,6 +157,20 @@ fn config(args: &Args) -> Result<Config> {
     }
     if f[0].parse::<u32>().ok() != Some(args.server_pid) || Path::new(f[1]) != args.socket {
         return Err("server identity changed".into());
+    }
+    let version = f[16]
+        .split('.')
+        .take(2)
+        .map(|part| {
+            part.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+                .parse::<u32>()
+                .unwrap_or(0)
+        })
+        .collect::<Vec<_>>();
+    if version.len() != 2 || (version[0], version[1]) < (3, 6) {
+        return Err(format!("tmux 3.6 or later is required (found {})", f[16]));
     }
     let raw = if !f[2].is_empty() {
         f[2]

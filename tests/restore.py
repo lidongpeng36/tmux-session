@@ -19,6 +19,7 @@ def main():
             first.cmd('run-shell',str(RESURRECT/'resurrect.tmux'))
             first.cmd('split-window','-d','-c',str(cwd),"printf 'restore marker 中文\\n'; sleep 120")
             first.cmd('new-session','-d','-s','extra','-c',str(cwd),'sleep 120')
+            wait(lambda:first.cmd('display','-p','-t','work:0.1','#{pane_current_path}')==str(cwd.resolve()) and first.cmd('display','-p','-t','extra:0.0','#{pane_current_path}')==str(cwd.resolve()))
             before=sorted(first.cmd('list-panes','-a','-F','#{session_name}\t#{pane_index}\t#{pane_current_path}').splitlines())
             first.set('@tmux-session-interval','0.02');first.load()
             wait(lambda:bool(first.opt('@tmux-session-last-success')))
@@ -31,7 +32,10 @@ def main():
             second.cmd('run-shell',str(RESURRECT/'resurrect.tmux'))
             second.set('@tmux-session-interval','0');second.set('@tmux-session-restore','on');second.load()
             wait(lambda:len(second.cmd('list-panes','-a','-F','#{pane_id}').splitlines())==3)
-            wait(lambda:sorted(second.cmd('list-panes','-a','-F','#{session_name}\t#{pane_index}\t#{pane_current_path}').splitlines())==before)
+            try:
+                wait(lambda:sorted(second.cmd('list-panes','-a','-F','#{session_name}\t#{pane_index}\t#{pane_current_path}').splitlines())==before)
+            except AssertionError:
+                raise AssertionError({'before':before,'after':second.cmd('list-panes','-a','-F','#{session_name}\t#{pane_index}\t#{pane_current_path}\t#{pane_current_command}'),'state':second.opt('@tmux-session-state'),'error':second.opt('@tmux-session-error'),'saved':(snapshots/'last').read_text()})
             after=sorted(second.cmd('list-panes','-a','-F','#{session_name}\t#{pane_index}\t#{pane_current_path}').splitlines())
             assert after==before,(before,after)
             count=len(second.cmd('list-panes','-a','-F','#{pane_id}').splitlines())

@@ -16,6 +16,8 @@ class Server:
         self.socket=str(directory/name)
         subprocess.run(['tmux','-S',self.socket,'-f','/dev/null','new-session','-d','-s','work','sleep 120'],check=True)
         self.pid=int(self.cmd('display','-p','#{pid}'))
+        self.set('default-shell','/bin/bash')
+        self.set('default-command','/bin/bash --noprofile --norc')
         self.set('@tmux-session-bin',str(BIN))
         if snapshot is not None:self.set('@resurrect-dir',str(snapshot))
     def cmd(self,*args):return subprocess.check_output(['tmux','-S',self.socket,*args],text=True,stderr=subprocess.STDOUT,timeout=8).strip()

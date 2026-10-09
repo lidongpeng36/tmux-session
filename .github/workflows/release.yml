@@ -35,7 +35,9 @@ jobs:
           toolchain: '1.95.0'
           targets: ${{ matrix.target }}
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools tmux
+        run: sudo apt-get update && sudo apt-get install -y musl-tools build-essential libevent-dev libncurses-dev pkg-config
+      - if: runner.os == 'Linux'
+        run: bash scripts/ci-tmux.sh
       - if: runner.os == 'macOS'
         run: brew install tmux
       - name: Check release version
