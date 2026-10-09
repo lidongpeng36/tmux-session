@@ -47,7 +47,9 @@ resurrect, then subsequent cached starts can restore automatically.
 
 ## Multiple servers and lifecycle
 
-The default socket uses resurrect's existing snapshot directory. A custom
+The default socket uses resurrect's existing snapshot directory: `~/.tmux/resurrect`
+when that legacy directory exists, otherwise `${XDG_DATA_HOME:-~/.local/share}/tmux/resurrect`.
+Explicit directories expand leading `~`, `$HOME` and `$HOSTNAME` without shell evaluation. A custom
 socket must set its own `@resurrect-dir`; a directory owned by another live
 server is refused. Per-server locking serializes configuration and callbacks;
 a separate directory lock protects save/restore operations between servers.
@@ -90,8 +92,19 @@ cargo build --locked --release
 python3 tests/installer.py
 python3 tests/cold_install_lifecycle.py
 python3 tests/lifecycle.py
+python3 tests/directories.py
 python3 tests/restore.py
 ```
+
+To count idle helper starts against an installed continuum checkout:
+
+```sh
+python3 tests/overhead.py --continuum "$HOME/.tmux/plugins/tmux-continuum" --output /tmp/tmux-session-overhead.json
+```
+
+The counter uses wrappers in an isolated real attached tmux server. It excludes
+startup and records helper starts only; wrapper overhead means it must not be
+used to estimate CPU time, latency or energy.
 
 Tests use isolated sockets and temporary snapshot directories, covering reload
 idempotence, retries, slow saves, conflicting server ownership, real restore,

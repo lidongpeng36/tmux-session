@@ -61,11 +61,35 @@ fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 fn path(value: &str) -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut value = value.replace("$HOME", &home);
+    if value.contains("$HOSTNAME") {
+        let mut hostname = [0u8; 256];
+        if unsafe { libc::gethostname(hostname.as_mut_ptr().cast(), hostname.len()) } == 0 {
+            let end = hostname
+                .iter()
+                .position(|b| *b == 0)
+                .unwrap_or(hostname.len());
+            value = value.replace("$HOSTNAME", &String::from_utf8_lossy(&hostname[..end]));
+        }
+    }
     if let Some(tail) = value.strip_prefix("~/") {
-        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(tail)
+        PathBuf::from(home).join(tail)
     } else {
         value.into()
     }
+}
+fn default_directory() -> PathBuf {
+    let legacy = path("~/.tmux/resurrect");
+    if legacy.is_dir() {
+        return legacy;
+    }
+    let base = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| path("~/.local/share"));
+    base.join("tmux/resurrect")
 }
 fn command(args: &Args, values: &[&str]) -> Result<String> {
     let output = Command::new(&args.tmux_bin)
@@ -156,11 +180,11 @@ fn config(args: &Args) -> Result<Config> {
     if f[14] == "on" {
         return Err("continuum OS autostart is not managed here; use launchd/systemd".into());
     }
-    let directory = path(if f[6].is_empty() {
-        "~/.tmux/resurrect"
+    let directory = if f[6].is_empty() {
+        default_directory()
     } else {
-        f[6]
-    });
+        path(f[6])
+    };
     // Isolated/custom servers must opt into their own snapshot directory.
     if args.socket.file_name().is_none_or(|n| n != "default") && f[6].is_empty() {
         return Err("custom server needs an explicit @resurrect-dir".into());
