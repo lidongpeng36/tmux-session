@@ -50,8 +50,8 @@ os.execv({real!r},[{real!r}]+sys.argv[1:])
             tmux('set','-g','@tmux-session-bin',str(BIN))
             tmux('run-shell',str(ROOT/'tmux-session.tmux'))
             end=time.monotonic()+6
-            while tmux('show-option','-gqv','@tmux-session-state')!='scheduled':
-                assert time.monotonic()<end,(tmux('show-option','-gqv','@tmux-session-state'),tmux('show-option','-gqv','@tmux-session-error'));time.sleep(.05)
+            while tmux('display','-p','#{TMUX_SESSION_STATE}')!='scheduled':
+                assert time.monotonic()<end,(tmux('display','-p','#{TMUX_SESSION_STATE}'),tmux('show-option','-gqv','@tmux-session-error'));time.sleep(.05)
         master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',24,100,0,0))
         client=subprocess.Popen([real_tmux,'-S',socket,'attach','-t','measure'],stdin=slave,stdout=slave,stderr=slave,env=env);os.close(slave)
         def drain():

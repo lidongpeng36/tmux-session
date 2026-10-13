@@ -48,7 +48,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "${GITHUB_REF#refs/tags/}" = "v$version"; fi
       - run: cargo test --locked --target ${{ matrix.target }}
       - run: cargo build --locked --release --target ${{ matrix.target }}
-      - run: python3 tests/installer.py && python3 tests/cold_install_lifecycle.py && python3 tests/lifecycle.py && python3 tests/directories.py && python3 tests/restore.py
+      - run: python3 tests/migration.py && python3 tests/installer.py && python3 tests/cold_install_lifecycle.py && python3 tests/lifecycle.py && python3 tests/directories.py && python3 tests/restore.py
         env:
           TMUX_SESSION_BIN: target/${{ matrix.target }}/release/tmux-session
       - name: Package

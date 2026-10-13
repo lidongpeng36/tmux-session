@@ -5,7 +5,7 @@ MODE="$1" SOCKET="$2" SERVER_PID="$3"
 BIN="$(tmux -S "$SOCKET" show-option -gqv @tmux-session-bin)"
 if [ -z "$BIN" ]; then
   if ! BIN="$(TMUX_SESSION_SERVER_PID="$SERVER_PID" "$ROOT/scripts/install.sh")"; then
-    tmux -S "$SOCKET" set -gq @tmux-session-state install-failed || true
+    tmux -S "$SOCKET" set-environment -gh TMUX_SESSION_STATE install-failed || true
     exit 1
   fi
 fi

@@ -22,7 +22,14 @@ class Server:
         if snapshot is not None:self.set('@resurrect-dir',str(snapshot))
     def cmd(self,*args):return subprocess.check_output(['tmux','-S',self.socket,*args],text=True,stderr=subprocess.STDOUT,timeout=8).strip()
     def set(self,key,value):return self.cmd('set','-g',key,value)
-    def opt(self,key):return self.cmd('show-option','-gqv',key)
+    def opt(self,key):
+        runtime = {'state', 'pending', 'restore-pending', 'initialized', 'next',
+                   'version', 'directory', 'last-success', 'error'}
+        suffix = key.removeprefix('@tmux-session-')
+        if suffix in runtime:
+            name = 'TMUX_SESSION_' + suffix.upper().replace('-', '_')
+            return self.cmd('display', '-p', '#{' + name + '}')
+        return self.cmd('show-option', '-gqv', key)
     def load(self):self.cmd('run-shell',str(PLUGIN))
     def close(self):
         with contextlib.suppress(subprocess.CalledProcessError):self.cmd('kill-server')

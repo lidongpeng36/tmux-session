@@ -105,15 +105,15 @@ fn command(args: &Args, values: &[&str]) -> Result<String> {
         .trim_end_matches('\n')
         .into())
 }
-fn options(args: &Args, values: &[(&str, String)]) -> Result<()> {
+fn runtime_values(args: &Args, values: &[(&str, String)]) -> Result<()> {
     let mut words = Vec::new();
     for (i, (key, value)) in values.iter().enumerate() {
         if i > 0 {
             words.push(";".into());
         }
         words.extend([
-            "set-option".into(),
-            "-gq".into(),
+            "set-environment".into(),
+            "-gh".into(),
             (*key).into(),
             value.clone(),
         ]);
@@ -122,7 +122,42 @@ fn options(args: &Args, values: &[(&str, String)]) -> Result<()> {
     Ok(())
 }
 fn state(args: &Args, value: &str) -> Result<()> {
-    options(args, &[("@tmux-session-state", value.into())])
+    runtime_values(args, &[("TMUX_SESSION_STATE", value.into())])
+}
+// Import old runtime values exactly once under the server lock. Empty new
+// tokens must never fall back to stale legacy pending timers after migration.
+fn migrate_runtime(args: &Args) -> Result<()> {
+    if command(
+        args,
+        &["display-message", "-p", "#{TMUX_SESSION_RUNTIME_READY}"],
+    )? == "1"
+    {
+        return Ok(());
+    }
+    let mappings = [
+        ("TMUX_SESSION_STATE", "@tmux-session-state"),
+        ("TMUX_SESSION_PENDING", "@tmux-session-pending"),
+        (
+            "TMUX_SESSION_RESTORE_PENDING",
+            "@tmux-session-restore-pending",
+        ),
+        ("TMUX_SESSION_INITIALIZED", "@tmux-session-initialized"),
+        ("TMUX_SESSION_NEXT", "@tmux-session-next"),
+        ("TMUX_SESSION_VERSION", "@tmux-session-version"),
+        ("TMUX_SESSION_DIRECTORY", "@tmux-session-directory"),
+        ("TMUX_SESSION_LAST_SUCCESS", "@tmux-session-last-success"),
+        ("TMUX_SESSION_ERROR", "@tmux-session-error"),
+        (
+            "TMUX_SESSION_LAST_TIMESTAMP",
+            "@continuum-save-last-timestamp",
+        ),
+    ];
+    let mut values = Vec::new();
+    for (new, old) in mappings {
+        values.push((new, command(args, &["show-option", "-gqv", old])?));
+    }
+    values.push(("TMUX_SESSION_RUNTIME_READY", "1".into()));
+    runtime_values(args, &values)
 }
 fn config(args: &Args) -> Result<Config> {
     let fields = [
@@ -133,15 +168,15 @@ fn config(args: &Args) -> Result<Config> {
         "@resurrect-save-script-path",
         "@resurrect-restore-script-path",
         "@resurrect-dir",
-        "@tmux-session-pending",
-        "@tmux-session-restore-pending",
-        "@tmux-session-initialized",
+        "TMUX_SESSION_PENDING",
+        "TMUX_SESSION_RESTORE_PENDING",
+        "TMUX_SESSION_INITIALIZED",
         "@tmux-session-restore",
         "@continuum-restore",
         "start_time",
-        "@continuum-save-last-timestamp",
+        "TMUX_SESSION_LAST_TIMESTAMP",
         "@continuum-boot",
-        "@tmux-session-next",
+        "TMUX_SESSION_NEXT",
         "version",
     ];
     let format = fields
@@ -283,8 +318,8 @@ fn schedule(args: &Args, mode: Mode, delay: f64) -> Result<()> {
         (now() * 1e6) as u64
     );
     let (verb, key) = match mode {
-        Mode::Tick => ("tick", "@tmux-session-pending"),
-        Mode::Restore => ("restore", "@tmux-session-restore-pending"),
+        Mode::Tick => ("tick", "TMUX_SESSION_PENDING"),
+        Mode::Restore => ("restore", "TMUX_SESSION_RESTORE_PENDING"),
         Mode::Configure => unreachable!(),
     };
     let words = [
@@ -301,16 +336,16 @@ fn schedule(args: &Args, mode: Mode, delay: f64) -> Result<()> {
     )
     .replace('#', "##");
     let delay = delay.max(0.05).to_string();
-    options(args, &[(key, token.clone())])?;
+    runtime_values(args, &[(key, token.clone())])?;
     if let Err(error) = command(args, &["run-shell", "-b", "-d", &delay, &job]) {
-        options(args, &[(key, "".into())])?;
+        runtime_values(args, &[(key, "".into())])?;
         return Err(error);
     }
     if matches!(mode, Mode::Tick) {
-        options(
+        runtime_values(
             args,
             &[(
-                "@tmux-session-next",
+                "TMUX_SESSION_NEXT",
                 (now() + delay.parse::<f64>().unwrap()).to_string(),
             )],
         )?;
@@ -377,13 +412,14 @@ fn run_script(args: &Args, script: &Path) -> Result<()> {
 }
 fn work(args: &Args) -> Result<()> {
     let _server_lock = server_lock(args)?;
+    migrate_runtime(args)?;
     let c = config(args)?;
-    options(
+    runtime_values(
         args,
         &[
-            ("@tmux-session-version", env!("CARGO_PKG_VERSION").into()),
+            ("TMUX_SESSION_VERSION", env!("CARGO_PKG_VERSION").into()),
             (
-                "@tmux-session-directory",
+                "TMUX_SESSION_DIRECTORY",
                 c.directory.to_string_lossy().into_owned(),
             ),
         ],
@@ -409,7 +445,7 @@ fn work(args: &Args) -> Result<()> {
             {
                 schedule(args, Mode::Restore, 1.0)?;
             }
-            options(args, &[("@tmux-session-initialized", "yes".into())])?;
+            runtime_values(args, &[("TMUX_SESSION_INITIALIZED", "yes".into())])?;
             state(
                 args,
                 if c.interval > 0.0 {
@@ -423,11 +459,11 @@ fn work(args: &Args) -> Result<()> {
             if args.token.is_empty() || args.token != c.pending {
                 return Ok(());
             }
-            options(
+            runtime_values(
                 args,
                 &[
-                    ("@tmux-session-pending", "".into()),
-                    ("@tmux-session-next", "".into()),
+                    ("TMUX_SESSION_PENDING", "".into()),
+                    ("TMUX_SESSION_NEXT", "".into()),
                 ],
             )?;
             if c.interval == 0.0 {
@@ -442,18 +478,18 @@ fn work(args: &Args) -> Result<()> {
             schedule(args, Mode::Tick, c.interval)?;
             match result {
                 Ok(()) => {
-                    options(
+                    runtime_values(
                         args,
                         &[
-                            ("@tmux-session-last-success", now().to_string()),
-                            ("@continuum-save-last-timestamp", (now() as u64).to_string()),
+                            ("TMUX_SESSION_LAST_SUCCESS", now().to_string()),
+                            ("TMUX_SESSION_LAST_TIMESTAMP", (now() as u64).to_string()),
                         ],
                     )?;
                     state(args, "scheduled")?;
                 }
                 Err(e) => {
                     state(args, "save-failed")?;
-                    options(args, &[("@tmux-session-error", e)])?;
+                    runtime_values(args, &[("TMUX_SESSION_ERROR", e)])?;
                 }
             }
         }
@@ -461,7 +497,7 @@ fn work(args: &Args) -> Result<()> {
             if args.token.is_empty() || args.token != c.restore_pending {
                 return Ok(());
             }
-            options(args, &[("@tmux-session-restore-pending", "".into())])?;
+            runtime_values(args, &[("TMUX_SESSION_RESTORE_PENDING", "".into())])?;
             if c.auto_restore && !path("~/tmux_no_auto_restore").exists() {
                 let _owner = claim(args, &c)?;
                 run_script(args, &c.restore)?;
@@ -474,7 +510,7 @@ fn main() {
     let args = Args::parse();
     if let Err(error) = work(&args) {
         let _ = state(&args, "configuration-error");
-        let _ = options(&args, &[("@tmux-session-error", error.clone())]);
+        let _ = runtime_values(&args, &[("TMUX_SESSION_ERROR", error.clone())]);
         eprintln!("tmux-session: {error}");
         std::process::exit(1);
     }

@@ -66,14 +66,26 @@ running processes and stale ownership is reclaimed after its server exits.
 ## Inspection and rollback
 
 ```sh
-tmux show-options -g | grep tmux-session
+tmux show-environment -gh | grep TMUX_SESSION
 ```
 
-`@tmux-session-state` reports `scheduled`, `saving`, `disabled`, `save-failed`,
-`configuration-error`, or `install-failed`. The version, next due time, last
-successful save and last error are native options. Reload retries overdue or
-interrupted scheduling. Timers call the launcher, so binary upgrades apply at
-the next invocation without installing another scheduler.
+`TMUX_SESSION_STATE` reports `scheduled`, `saving`, `disabled`, `save-failed`,
+`configuration-error`, or `install-failed`. Version, directory, pending token, next
+due time, last success and error are hidden global environment values prefixed
+`TMUX_SESSION_`. They are not exported to child processes. Configuration remains
+in `@tmux-session-*` options. Runtime updates do not use `set-option` and therefore
+do not trigger a full client redraw during automatic saves.
+
+On the first invocation after upgrade, legacy runtime options are imported under
+the server lock, including a pending timer token and its deadline. A migration
+marker prevents empty completed tokens falling back to stale legacy values.
+Existing timers call the launcher and use the new binary without adding another
+scheduler. Reload retries overdue or interrupted scheduling. Old diagnostic
+options remain a historical snapshot; they are no longer updated.
+
+For rollback, disable autosave and let pending work finish before switching to
+an older binary; old runtime options may contain stale tokens. Snapshot files
+remain compatible. Do not run old and new scheduler binaries simultaneously.
 
 To stop, set `@tmux-session-interval 0` and reload. To revert to continuum,
 replace this plugin in the TPM list, keep its interval disabled until the old
@@ -91,6 +103,7 @@ cargo test --locked
 cargo build --locked --release
 python3 tests/installer.py
 python3 tests/cold_install_lifecycle.py
+python3 tests/migration.py
 python3 tests/lifecycle.py
 python3 tests/directories.py
 python3 tests/restore.py
